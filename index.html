@@ -31,15 +31,35 @@
     overflow: hidden;
     perspective: 1200px;
     background: #050505;
+    -webkit-filter: blur(0px);
+    filter: blur(0px);
+    transition:
+      opacity 1.4s cubic-bezier(0.4, 0, 0.2, 1),
+      -webkit-filter 1.4s cubic-bezier(0.4, 0, 0.2, 1),
+      filter 1.4s cubic-bezier(0.4, 0, 0.2, 1);
   }
   .slide.active {
     opacity: 1;
     visibility: visible;
     z-index: 2;
-    transition: opacity 1.6s cubic-bezier(0.4, 0, 0.2, 1) 0.1s;
+    -webkit-filter: blur(0px);
+    filter: blur(0px);
+  }
+  /* Blur-dissolve: incoming starts soft, outgoing softens away */
+  .slide.entering {
+    -webkit-filter: blur(10px);
+    filter: blur(10px);
   }
   .slide.exiting {
-    transition: opacity 1.4s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0;
+    -webkit-filter: blur(10px);
+    filter: blur(10px);
+  }
+  @media (max-width: 900px) {
+    .slide.entering, .slide.exiting {
+      -webkit-filter: blur(6px);
+      filter: blur(6px);
+    }
   }
 
   /* Wrapper that carries the Ken Burns motion */
@@ -98,6 +118,16 @@
   @keyframes kb3 { from { transform: scale(1.02); transform-origin: 20% 70%; } to { transform: scale(1.16); transform-origin: 60% 30%; } }
   @keyframes kb4 { from { transform: scale(1.15); transform-origin: 80% 20%; } to { transform: scale(1.02); transform-origin: 40% 70%; } }
   @keyframes kb5 { from { transform: scale(1.06); transform-origin: 45% 60%; } to { transform: scale(1.12); transform-origin: 75% 45%; } }
+
+  /* ============ COLOR FLUSH (color-matched crossfade) ============ */
+  .flush {
+    position: fixed; inset: 0;
+    z-index: 20;
+    pointer-events: none;
+    opacity: 0;
+    background: rgb(0, 0, 0);
+    transition: opacity 0.9s ease-out;
+  }
 
   /* ============ AMBIENT OVERLAYS ============ */
   .atmosphere {
@@ -269,6 +299,7 @@
 
 <div class="atmosphere"></div>
 <div class="grain"></div>
+<div class="flush" id="flush"></div>
 
 <div class="progress" id="progress"></div>
 
@@ -295,6 +326,29 @@
   var progress = document.getElementById('progress');
   var preloader = document.getElementById('preloader');
   var dotsBox = document.getElementById('dots');
+  var flush = document.getElementById('flush');
+
+  /* Dominant colour per slide for the colour-matched crossfade */
+  var palettes = new Array(TOTAL).fill('0,0,0');
+
+  function getPalette(img, idx) {
+    try {
+      var c = document.createElement('canvas');
+      c.width = 9; c.height = 9;
+      var ctx = c.getContext('2d');
+      if (!ctx) return;
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(img, 0, 0, 9, 9);
+      var d = ctx.getImageData(0, 0, 9, 9).data;
+      var r = 0, g = 0, b = 0, n = 0;
+      for (var i = 0; i < d.length; i += 4) {
+        var sat = Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]);
+        var w = 0.45 + sat / 255;
+        r += d[i] * w; g += d[i + 1] * w; b += d[i + 2] * w; n += w;
+      }
+      palettes[idx] = Math.round(r / n) + ',' + Math.round(g / n) + ',' + Math.round(b / n);
+    } catch (err) {}
+  }
 
   /* Build dots */
   for (var d = 0; d < TOTAL; d++) {
@@ -340,10 +394,17 @@
       Promise.all(allImgs.map(function(img) {
         return img.decode().catch(function() {});
       })).then(function() {
+        /* Sample each image's dominant colour for the match-fade */
+        SLIDES.forEach(function(slide, i) {
+          getPalette(slide.querySelector('img.fg'), i);
+        });
         preloader.classList.add('done');
         setTimeout(engine.start, 300);
       });
     } else {
+      SLIDES.forEach(function(slide, i) {
+        getPalette(slide.querySelector('img.fg'), i);
+      });
       preloader.classList.add('done');
       setTimeout(engine.start, 300);
     }
@@ -354,6 +415,7 @@
   var idx = -1;
   var lastIdx = -1;
   var currentTimer = null;
+  var tintTimer = null;
 
   function shuffle() {
     for (var i = 0; i < TOTAL; i++) order[i] = i;
@@ -426,14 +488,33 @@
       var prevEl = SLIDES[prev];
       var nextEl = SLIDES[next];
 
+      /* Ken Burns on the incoming art */
       var kb = nextEl.querySelector('.kb');
       applyKB(kb);
 
+      /* Colour-matched crossfade: wash the screen with the incoming image's dominant colour */
+      flush.style.opacity = '0';
+      flush.style.backgroundColor = 'rgb(' + (palettes[next] || '0,0,0') + ')';
+      void flush.offsetWidth;
+      flush.style.opacity = '0.28';
+      clearTimeout(tintTimer);
+      tintTimer = setTimeout(function() {
+        flush.style.opacity = '0';
+      }, 300);
+
+      /* Blur-dissolve in: jump the incoming slide to blurred, then sharpen into focus */
+      nextEl.style.transition = 'none';
       nextEl.classList.remove('exiting');
+      nextEl.classList.add('entering');
       nextEl.classList.add('active');
+      void nextEl.offsetWidth;
+      nextEl.style.transition = '';
+      void nextEl.offsetWidth;
+      nextEl.classList.remove('entering');
+
+      /* Outgoing softens away */
       prevEl.classList.remove('active');
       prevEl.classList.add('exiting');
-
       setTimeout(function() {
         prevEl.classList.remove('exiting');
       }, 1500);
