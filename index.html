@@ -29,6 +29,7 @@
     visibility: hidden;
     z-index: 1;
     overflow: hidden;
+    perspective: 1200px;
   }
   .slide.active {
     opacity: 1;
@@ -45,6 +46,15 @@
     position: absolute;
     inset: 0;
     will-change: transform;
+  }
+
+  /* 3D tilt layer — receives gyro / mouse rotation */
+  .tilt3d {
+    position: absolute;
+    inset: -8%;
+    will-change: transform;
+    transform-style: preserve-3d;
+    transform: perspective(1100px) rotateX(0deg) rotateY(0deg) scale(1.06);
   }
 
   .slide img {
@@ -233,19 +243,19 @@
 
 <div class="stage">
   <div class="slide active" data-idx="0">
-    <div class="kb"><img class="bg" src="images/1.jpg" alt=""><img class="fg" src="images/1.jpg" alt=""></div>
+    <div class="tilt3d"><div class="kb"><img class="bg" src="images/1.jpg" alt=""><img class="fg" src="images/1.jpg" alt=""></div></div>
   </div>
   <div class="slide" data-idx="1">
-    <div class="kb"><img class="bg" src="images/2.jpg" alt=""><img class="fg" src="images/2.jpg" alt=""></div>
+    <div class="tilt3d"><div class="kb"><img class="bg" src="images/2.jpg" alt=""><img class="fg" src="images/2.jpg" alt=""></div></div>
   </div>
   <div class="slide" data-idx="2">
-    <div class="kb"><img class="bg" src="images/3.jpg" alt=""><img class="fg" src="images/3.jpg" alt=""></div>
+    <div class="tilt3d"><div class="kb"><img class="bg" src="images/3.jpg" alt=""><img class="fg" src="images/3.jpg" alt=""></div></div>
   </div>
   <div class="slide" data-idx="3">
-    <div class="kb"><img class="bg" src="images/4.jpg" alt=""><img class="fg" src="images/4.jpg" alt=""></div>
+    <div class="tilt3d"><div class="kb"><img class="bg" src="images/4.jpg" alt=""><img class="fg" src="images/4.jpg" alt=""></div></div>
   </div>
   <div class="slide" data-idx="4">
-    <div class="kb"><img class="bg" src="images/5.jpg" alt=""><img class="fg" src="images/5.jpg" alt=""></div>
+    <div class="tilt3d"><div class="kb"><img class="bg" src="images/5.jpg" alt=""><img class="fg" src="images/5.jpg" alt=""></div></div>
   </div>
 </div>
 
@@ -355,6 +365,7 @@
       });
       applyKB(SLIDES[order[0]].querySelector('.kb'));
       setDots(order[0]);
+      tilt.current = SLIDES[order[0]].querySelector('.tilt3d');
       engine.schedule();
     },
     isRunning: true,
@@ -392,6 +403,7 @@
         prevEl.classList.remove('exiting');
       }, 1500);
 
+      tilt.current = nextEl.querySelector('.tilt3d');
       setDots(next);
     },
     skip: function() {
@@ -400,6 +412,95 @@
       engine.schedule();
     }
   };
+
+  /* ============ 3D TILT ============ */
+  var tilt = {
+    current: null,
+    rx: 0, ry: 0,
+    trx: 0, try_: 0,
+    raf: null,
+    reduced: window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+
+    setTarget: function(rx, ry) {
+      this.trx = Math.max(-9, Math.min(9, rx));
+      this.try_ = Math.max(-9, Math.min(9, ry));
+    },
+    idle: function() {
+      this.setTarget(0, 0);
+    },
+    loop: function() {
+      this.rx += (this.trx - this.rx) * 0.09;
+      this.ry += (this.try_ - this.ry) * 0.09;
+      if (Math.abs(this.trx - this.rx) < 0.03) this.rx = this.trx;
+      if (Math.abs(this.try_ - this.ry) < 0.03) this.ry = this.try_;
+      if (this.current) {
+        this.current.style.transform =
+          'perspective(1100px) rotateX(' + this.rx.toFixed(2) + 'deg) rotateY(' + this.ry.toFixed(2) + 'deg) scale(1.06)';
+      }
+      this.raf = requestAnimationFrame(this.loop.bind(this));
+    },
+    start: function() {
+      this.loop();
+    }
+  };
+
+  if (!tilt.reduced) {
+    tilt.start();
+
+    /* Desktop / fine pointer */
+    if (window.matchMedia && window.matchMedia('(pointer: fine)').matches) {
+      document.addEventListener('mousemove', function(e) {
+        var nx = e.clientX / window.innerWidth - 0.5;
+        var ny = e.clientY / window.innerHeight - 0.5;
+        var el = document.body;
+        el.classList.add('tilt-hover');
+        tilt.setTarget(-ny * 12, nx * 16);
+      });
+      document.addEventListener('mouseleave', function() {
+        document.body.classList.remove('tilt-hover');
+        tilt.idle();
+      });
+    }
+
+    /* Phone gyroscope */
+    function bindGyro() {
+      window.addEventListener('deviceorientation', function(e) {
+        if (e.beta === null || e.gamma === null) return;
+        var beta = (typeof e.webkitCompassHeading !== 'undefined') ? e.beta : e.beta;
+        var g = e.gamma;
+        var b = beta - (window.innerHeight > window.innerWidth ? 45 : 30);
+        if (Math.abs(b) > 60) return;
+        var rx = b * 0.45;
+        var ry = g * 0.45;
+        tilt.setTarget(Math.max(-9, Math.min(9, rx)), Math.max(-9, Math.min(9, ry)));
+      }, { passive: true });
+    }
+
+    function requestGyro() {
+      try {
+        if (typeof DeviceOrientationEvent !== 'undefined' &&
+            typeof DeviceOrientationEvent.requestPermission === 'function') {
+          DeviceOrientationEvent.requestPermission().then(function(state) {
+            if (state === 'granted') bindGyro();
+          }).catch(function() {});
+        } else if (typeof window.DeviceOrientationEvent !== 'undefined') {
+          bindGyro();
+        }
+      } catch (err) {}
+    }
+
+    /* Ask for gyro on the first interaction (iOS requirement) */
+    var gyroAsked = false;
+    function tryGyro() {
+      if (gyroAsked) return;
+      gyroAsked = true;
+      requestGyro();
+      window.removeEventListener('touchstart', tryGyro);
+      window.removeEventListener('click', tryGyro);
+    }
+    window.addEventListener('touchstart', tryGyro, { passive: true });
+    window.addEventListener('click', tryGyro);
+  }
 
   tapZone.addEventListener('click', engine.skip);
   tapZone.addEventListener('touchend', function(e) {
