@@ -2,290 +2,410 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>networKING</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;1,300&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,500;1,300&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-  body {
+  html, body {
     background: #000;
     overflow: hidden;
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    height: 100%;
     font-family: 'Cormorant Garamond', serif;
-    cursor: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
   }
 
-  .stage {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
+  /* ============ SLIDES ============ */
   .slide {
-    position: absolute;
-    inset: 0;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw;
+    height: 100dvh;
     opacity: 0;
-    will-change: opacity, transform;
-    transition: opacity 1.6s cubic-bezier(0.4, 0, 0.2, 1);
+    visibility: hidden;
+    z-index: 1;
+    overflow: hidden;
   }
-
   .slide.active {
     opacity: 1;
+    visibility: visible;
     z-index: 2;
+    transition: opacity 1.6s cubic-bezier(0.4, 0, 0.2, 1) 0.1s;
+  }
+  .slide.exiting {
+    transition: opacity 1.4s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  .slide.exiting {
-    opacity: 0;
-    z-index: 1;
+  /* Wrapper that carries the Ken Burns motion */
+  .kb {
+    position: absolute;
+    inset: 0;
+    will-change: transform;
   }
 
   .slide img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
+  }
+
+  /* Foreground — the actual art (contain on phone so it never crops badly) */
+  .slide img.fg {
     object-fit: cover;
     object-position: center;
-    will-change: transform;
-    transform-origin: center center;
+    z-index: 2;
   }
 
-  /* Ken Burns — each slide gets a unique random animation via JS */
-  @keyframes kb1 {
-    from { transform: scale(1.0) translate(0, 0); }
-    to   { transform: scale(1.12) translate(-2%, 1%); }
-  }
-  @keyframes kb2 {
-    from { transform: scale(1.05) translate(2%, -1%); }
-    to   { transform: scale(1.0) translate(-1%, 2%); }
-  }
-  @keyframes kb3 {
-    from { transform: scale(1.1) translate(-3%, -2%); }
-    to   { transform: scale(1.0) translate(1%, 1%); }
-  }
-  @keyframes kb4 {
-    from { transform: scale(1.0) translate(1%, 3%); }
-    to   { transform: scale(1.15) translate(-2%, -1%); }
-  }
-  @keyframes kb5 {
-    from { transform: scale(1.08) translate(-1%, 2%); }
-    to   { transform: scale(1.02) translate(3%, -2%); }
+  /* Blurred backdrop that fills the box on mobile */
+  .slide img.bg {
+    object-fit: cover;
+    object-position: center;
+    filter: blur(60px) brightness(0.45) saturate(1.35);
+    transform: scale(1.25);
+    z-index: 1;
   }
 
-  /* Vignette overlay */
-  .vignette {
-    position: fixed;
-    inset: 0;
-    z-index: 50;
-    pointer-events: none;
-    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.7) 100%);
+  @media (max-width: 900px) {
+    .slide img.fg { object-fit: contain; padding: 0; }
   }
 
-  /* Film grain */
+  /* ============ KEN BURNS KEYS (randomised) ============ */
+  @keyframes kb1 { from { transform: scale(1.00); transform-origin: 50% 50%; } to { transform: scale(1.14); transform-origin: 30% 40%; } }
+  @keyframes kb2 { from { transform: scale(1.14); transform-origin: 70% 30%; } to { transform: scale(1.00); transform-origin: 50% 50%; } }
+  @keyframes kb3 { from { transform: scale(1.02); transform-origin: 20% 70%; } to { transform: scale(1.16); transform-origin: 60% 30%; } }
+  @keyframes kb4 { from { transform: scale(1.15); transform-origin: 80% 20%; } to { transform: scale(1.02); transform-origin: 40% 70%; } }
+  @keyframes kb5 { from { transform: scale(1.06); transform-origin: 45% 60%; } to { transform: scale(1.12); transform-origin: 75% 45%; } }
+
+  /* ============ AMBIENT OVERLAYS ============ */
+  .atmosphere {
+    position: fixed; inset: 0;
+    z-index: 10; pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 42%, rgba(0,0,0,0.55) 100%);
+    animation: atmos 9s ease-in-out infinite alternate;
+  }
+  @keyframes atmos { from { opacity: 0.5; } to { opacity: 1; } }
+
   .grain {
-    position: fixed;
-    inset: -50%;
-    z-index: 51;
-    pointer-events: none;
-    opacity: 0.035;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-    animation: grain 0.5s steps(1) infinite;
+    position: fixed; inset: -60%;
+    z-index: 11; pointer-events: none;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    animation: grainShift 0.4s steps(1) infinite;
   }
-  @keyframes grain {
+  @keyframes grainShift {
     0%   { transform: translate(0, 0); }
-    20%  { transform: translate(-5%, 5%); }
-    40%  { transform: translate(3%, -3%); }
-    60%  { transform: translate(-2%, 2%); }
-    80%  { transform: translate(5%, -5%); }
+    25%  { transform: translate(-4%, 4%); }
+    50%  { transform: translate(3%, -3%); }
+    75%  { transform: translate(-2%, 2%); }
     100% { transform: translate(0, 0); }
   }
 
-  /* Subtle dark overlay that pulses gently */
-  .atmosphere {
+  /* ============ PROGRESS BAR ============ */
+  .progress {
     position: fixed;
-    inset: 0;
-    z-index: 49;
-    pointer-events: none;
-    background: rgba(0, 0, 0, 0.15);
-    animation: atmos 8s ease-in-out infinite alternate;
-  }
-  @keyframes atmos {
-    from { opacity: 0.1; }
-    to   { opacity: 0.25; }
+    top: 0; left: 0;
+    height: 3px;
+    width: 0%;
+    z-index: 40;
+    background: linear-gradient(90deg, #e8c37e, #f7e8c3, #e8c37e);
+    box-shadow: 0 0 12px rgba(232, 195, 126, 0.6);
+    border-radius: 0 3px 3px 0;
   }
 
-  /* Footer */
+  /* ============ DOTS ============ */
+  .dots {
+    position: fixed;
+    bottom: 56px; left: 0; right: 0;
+    z-index: 40;
+    display: flex;
+    justify-content: center;
+    gap: 9px;
+    pointer-events: none;
+  }
+  .dots i {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.28);
+    transition: all 0.6s ease;
+    box-shadow: 0 0 6px rgba(0,0,0,0.5);
+  }
+  .dots i.on {
+    width: 24px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #e8c37e, #f7e8c3);
+    box-shadow: 0 0 10px rgba(232, 195, 126, 0.55);
+  }
+
+  /* ============ GLASSY FOOTER ============ */
   .footer {
     position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 100;
+    bottom: 0; left: 0; right: 0;
+    z-index: 30;
     text-align: center;
-    padding: 24px 16px 20px;
-    background: linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 100%);
+    padding: 42px 16px 18px;
     pointer-events: none;
+    background: linear-gradient(to top, rgba(0,0,0,0.78) 4%, rgba(0,0,0,0.35) 45%, transparent 100%);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
   }
-
-  .footer span {
-    font-size: 14px;
-    font-weight: 300;
-    letter-spacing: 6px;
+  .footer .brand {
+    font-size: 19px;
+    font-weight: 500;
+    letter-spacing: 9px;
     text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.45);
+    color: transparent;
+    background: linear-gradient(100deg, #b8914f 5%, #f1dcae 35%, #e8c37e 55%, #b8914f 90%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: shimmer 5s linear infinite;
     font-style: italic;
   }
-
-  /* Top fade for balance */
-  .top-fade {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 80px;
-    z-index: 49;
-    pointer-events: none;
-    background: linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, transparent 100%);
+  .footer .tagline {
+    margin-top: 6px;
+    font-size: 11px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.35);
+    font-weight: 300;
+  }
+  @keyframes shimmer {
+    to { background-position: 200% center; }
   }
 
-  /* Mobile adjustments */
-  @media (max-width: 768px) {
-    .footer span {
-      font-size: 12px;
-      letter-spacing: 5px;
-    }
-    .footer {
-      padding: 20px 16px 16px;
-    }
-  }
-
-  /* Touch indicator — tap to skip */
+  /* ============ TOUCH ============ */
   .tap-zone {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-    -webkit-tap-highlight-color: transparent;
+    position: fixed; inset: 0;
+    z-index: 5;
+    cursor: pointer;
+  }
+
+  /* ============ PRELOADER ============ */
+  .preloader {
+    position: fixed; inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    background: #000;
+    transition: opacity 0.8s ease;
+  }
+  .preloader.done { opacity: 0; pointer-events: none; }
+  .preloader .bar {
+    width: 140px; height: 2px;
+    background: rgba(255,255,255,0.12);
+    overflow: hidden;
+    border-radius: 2px;
+  }
+  .preloader .bar i {
+    display: block;
+    width: 40%; height: 100%;
+    background: linear-gradient(90deg, #b8914f, #f7e8c3);
+    animation: load 1.1s ease-in-out infinite;
+  }
+  @keyframes load { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
+  .preloader .word {
+    font-size: 15px;
+    letter-spacing: 8px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.5);
+    font-style: italic;
+    font-weight: 300;
+    animation: breathe 1.8s ease-in-out infinite;
+  }
+  @keyframes breathe { 0%,100% { opacity: 0.35; } 50% { opacity: 0.9; } }
+
+  @media (max-width: 768px) {
+    .footer .brand { font-size: 16px; letter-spacing: 7px; }
+    .footer .tagline { font-size: 10px; letter-spacing: 3px; }
+    .dots { bottom: 54px; }
   }
 </style>
 </head>
 <body>
 
-<div class="stage" id="stage">
-  <div class="slide active" id="s0"><img src="images/1.jpg" alt=""></div>
-  <div class="slide"        id="s1"><img src="images/2.jpg" alt=""></div>
-  <div class="slide"        id="s2"><img src="images/3.jpg" alt=""></div>
-  <div class="slide"        id="s3"><img src="images/4.jpg" alt=""></div>
-  <div class="slide"        id="s4"><img src="images/5.jpg" alt=""></div>
+<div class="stage">
+  <div class="slide active" data-idx="0">
+    <div class="kb"><img class="bg" src="images/1.jpg" alt=""><img class="fg" src="images/1.jpg" alt=""></div>
+  </div>
+  <div class="slide" data-idx="1">
+    <div class="kb"><img class="bg" src="images/2.jpg" alt=""><img class="fg" src="images/2.jpg" alt=""></div>
+  </div>
+  <div class="slide" data-idx="2">
+    <div class="kb"><img class="bg" src="images/3.jpg" alt=""><img class="fg" src="images/3.jpg" alt=""></div>
+  </div>
+  <div class="slide" data-idx="3">
+    <div class="kb"><img class="bg" src="images/4.jpg" alt=""><img class="fg" src="images/4.jpg" alt=""></div>
+  </div>
+  <div class="slide" data-idx="4">
+    <div class="kb"><img class="bg" src="images/5.jpg" alt=""><img class="fg" src="images/5.jpg" alt=""></div>
+  </div>
 </div>
 
-<div class="vignette"></div>
-<div class="grain"></div>
 <div class="atmosphere"></div>
-<div class="top-fade"></div>
+<div class="grain"></div>
 
-<div class="footer"><span>networKING</span></div>
+<div class="progress" id="progress"></div>
+
+<div class="dots" id="dots"></div>
+
+<div class="footer">
+  <div class="brand">networKING</div>
+  <div class="tagline">Art + Intelligence</div>
+</div>
 
 <div class="tap-zone" id="tapZone"></div>
 
+<div class="preloader" id="preloader">
+  <div class="word">networKING</div>
+  <div class="bar"><i></i></div>
+</div>
+
 <script>
 (function() {
-  const SLIDES = document.querySelectorAll('.slide');
-  const TOTAL = SLIDES.length;
-  const KBS = ['kb1', 'kb2', 'kb3', 'kb4', 'kb5'];
-  const tapZone = document.getElementById('tapZone');
+  var SLIDES = document.querySelectorAll('.slide');
+  var TOTAL = SLIDES.length;
+  var KBS = ['kb1', 'kb2', 'kb3', 'kb4', 'kb5'];
+  var tapZone = document.getElementById('tapZone');
+  var progress = document.getElementById('progress');
+  var preloader = document.getElementById('preloader');
+  var dotsBox = document.getElementById('dots');
+  var loaded = 0;
+  var images = [];
 
-  let order = [];
-  let idx = 0;
-  let timer = null;
+  /* Build dots */
+  for (var d = 0; d < TOTAL; d++) {
+    var dot = document.createElement('i');
+    dotsBox.appendChild(dot);
+  }
 
-  /* Fisher-Yates shuffle */
+  /* Preload all images, then start */
+  SLIDES.forEach(function(slide) {
+    slide.querySelectorAll('img').forEach(function(img) {
+      if (images.indexOf(img.src) === -1) images.push(img.src);
+    });
+  });
+
+  images.forEach(function(src) {
+    var pre = new Image();
+    pre.onload = pre.onerror = function() {
+      loaded++;
+      if (loaded < images.length) return;
+      preloader.classList.add('done');
+      setTimeout(engine.start, 300);
+    };
+    pre.src = src;
+  });
+
+  /* Timer that cannot get stuck: always schedules itself again */
+  var order = [];
+  var idx = -1;
+  var lastIdx = -1;
+  var currentTimer = null;
+
   function shuffle() {
-    order = Array.from({ length: TOTAL }, (_, i) => i);
-    for (let i = order.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [order[i], order[j]] = [order[j], order[i]];
+    for (var i = 0; i < TOTAL; i++) order[i] = i;
+    for (var i = TOTAL - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = order[i]; order[i] = order[j]; order[j] = t;
+    }
+    /* Don't start with the same visual as the last end of previous cycle */
+    if (lastIdx !== -1 && order.length > 1 && order[0] === lastIdx) {
+      var k = order[1]; order[1] = order[0]; order[0] = k;
     }
   }
 
-  function pickKB() {
-    return KBS[Math.floor(Math.random() * KBS.length)];
+  function applyKB(el, announce) {
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    var kb = KBS[Math.floor(Math.random() * KBS.length)];
+    var dur = 13 + Math.random() * 7;
+    el.style.animation = kb + ' ' + dur + 's ease-in-out both';
   }
 
-  function getKBStyle() {
-    /* Random duration between 12–20s for the Ken Burns pan */
-    const dur = 12 + Math.random() * 8;
-    const kb = pickKB();
-    return { animation: `${kb} ${dur}s ease-in-out forwards` };
+  function setDots(activeIdx, prevIdx) {
+    Array.prototype.forEach.call(dotsBox.children, function(dot, i) {
+      dot.classList.remove('on');
+      if (i === activeIdx) dot.classList.add('on');
+    });
   }
 
-  function showSlide(n) {
-    const prev = order[idx];
-    idx = n;
-    const next = order[idx];
-    const prevEl = SLIDES[prev];
-    const nextEl = SLIDES[next];
-
-    /* Apply Ken Burns to the incoming image */
-    const img = nextEl.querySelector('img');
-    img.style.animation = 'none';
-    void img.offsetWidth; /* reflow */
-    const kbStyle = getKBStyle();
-    img.style.animation = kbStyle.animation;
-
-    /* Crossfade */
-    nextEl.classList.add('active');
-    prevEl.classList.remove('active');
-    prevEl.classList.add('exiting');
-
-    /* Clean up after transition */
-    setTimeout(() => {
-      prevEl.classList.remove('exiting');
-    }, 1800);
+  function runProgress(ms) {
+    progress.style.transition = 'none';
+    progress.style.width = '0%';
+    void progress.offsetWidth;
+    progress.style.transition = 'width ' + ms + 'ms linear';
+    progress.style.width = '100%';
   }
 
-  function next() {
-    let nextIdx = (idx + 1) % TOTAL;
-    if (nextIdx === 0) {
+  var engine = {
+    start: function() {
       shuffle();
+      idx = 0;
+      SLIDES.forEach(function(s, i) {
+        s.classList.remove('active', 'exiting');
+        if (i === order[0]) s.classList.add('active');
+      });
+      applyKB(SLIDES[order[0]].querySelector('.kb'));
+      setDots(order[0]);
+      engine.schedule();
+    },
+    isRunning: true,
+    schedule: function() {
+      clearTimeout(currentTimer);
+      var delay = 5000 + Math.random() * 4000;
+      runProgress(delay);
+      currentTimer = setTimeout(function() {
+        engine.next();
+        engine.schedule();
+      }, delay + 300);
+    },
+    next: function() {
+      var prev = order[idx];
+      idx++;
+      if (idx >= TOTAL) {
+        shuffle();
+        idx = 0;
+      }
+      var next = order[idx];
+      lastIdx = prev;
+
+      var prevEl = SLIDES[prev];
+      var nextEl = SLIDES[next];
+
+      var kb = nextEl.querySelector('.kb');
+      applyKB(kb);
+
+      nextEl.classList.remove('exiting');
+      nextEl.classList.add('active');
+      prevEl.classList.remove('active');
+      prevEl.classList.add('exiting');
+
+      setTimeout(function() {
+        prevEl.classList.remove('exiting');
+      }, 1500);
+
+      setDots(next);
+    },
+    skip: function() {
+      clearTimeout(currentTimer);
+      engine.next();
+      engine.schedule();
     }
-    showSlide(nextIdx);
-    /* Random interval 5–9 seconds */
-    const delay = 5000 + Math.random() * 4000;
-    timer = setTimeout(next, delay);
-  }
+  };
 
-  function skip() {
-    clearTimeout(timer);
-    next();
-  }
-
-  /* Tap / click to skip */
-  tapZone.addEventListener('click', skip);
+  tapZone.addEventListener('click', engine.skip);
   tapZone.addEventListener('touchend', function(e) {
     e.preventDefault();
-    skip();
+    engine.skip();
   });
-
-  /* Preload images */
-  SLIDES.forEach((slide) => {
-    const img = slide.querySelector('img');
-    if (img.complete) return;
-    const preload = new Image();
-    preload.src = img.src;
-  });
-
-  /* Start */
-  shuffle();
-
-  /* Initial Ken Burns on first slide */
-  const firstImg = SLIDES[order[0]].querySelector('img');
-  const kbStyle = getKBStyle();
-  firstImg.style.animation = kbStyle.animation;
-
-  timer = setTimeout(next, 4000 + Math.random() * 2000);
 })();
 </script>
 </body>
