@@ -448,34 +448,70 @@
     }
   };
 
-  /* ============ 3D TILT ============ */
+  /* ============ 3D TILT (spring physics, delta-time, input-filtered) ============ */
   var tilt = {
     current: null,
-    rx: 0, ry: 0,
-    trx: 0, try_: 0,
+    x: 0, y: 0, vx: 0, vy: 0,
+    rawX: 0, rawY: 0,
+    tx: 0, ty: 0,
+    last: null,
     raf: null,
     reduced: window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
 
-    setTarget: function(rx, ry) {
-      this.trx = Math.max(-9, Math.min(9, rx));
-      this.try_ = Math.max(-9, Math.min(9, ry));
+    input: function(rx, ry) {
+      rx = Math.max(-9, Math.min(9, rx));
+      ry = Math.max(-9, Math.min(9, ry));
+      /* deadzone: ignore micro jitter from hand shake / sensor noise */
+      if (Math.abs(rx) < 0.35) rx = 0;
+      if (Math.abs(ry) < 0.35) ry = 0;
+      this.rawX = rx;
+      this.rawY = ry;
     },
     idle: function() {
-      this.setTarget(0, 0);
+      this.rawX = 0;
+      this.rawY = 0;
     },
-    loop: function() {
-      this.rx += (this.trx - this.rx) * 0.09;
-      this.ry += (this.try_ - this.ry) * 0.09;
-      if (Math.abs(this.trx - this.rx) < 0.03) this.rx = this.trx;
-      if (Math.abs(this.try_ - this.ry) < 0.03) this.ry = this.try_;
+
+    loop: function(now) {
+      if (this.last === null) this.last = now;
+      var dt = (now - this.last) / 1000;
+      this.last = now;
+      if (dt > 0.064) dt = 0.064;
+      if (dt <= 0) dt = 0.016;
+
+      /* low-pass the smoothed target so raw input feels silky */
+      var lf = dt * 12;
+      if (lf > 1) lf = 1;
+      this.tx += (this.rawX - this.tx) * lf;
+      this.ty += (this.rawY - this.ty) * lf;
+
+      /* critically-damped spring: no jitter, no overshoot, gentle float */
+      var omega = 4.0;
+      var damp = 1.05;
+      var vmax = 14;
+
+      this.vx += ((this.tx - this.x) * omega * omega - 2 * damp * omega * this.vx) * dt;
+      this.vy += ((this.ty - this.y) * omega * omega - 2 * damp * omega * this.vy) * dt;
+      if (this.vx > vmax) this.vx = vmax; if (this.vx < -vmax) this.vx = -vmax;
+      if (this.vy > vmax) this.vy = vmax; if (this.vy < -vmax) this.vy = -vmax;
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+
+      /* settle exactly when fully at rest */
+      if (Math.abs(this.tx - this.x) < 0.012 && Math.abs(this.vx) < 0.02) { this.x = this.tx; this.vx = 0; }
+      if (Math.abs(this.ty - this.y) < 0.012 && Math.abs(this.vy) < 0.02) { this.y = this.ty; this.vy = 0; }
+
       if (this.current) {
+        var ptx = -this.y * 2.6;
+        var pty = this.x * 2.6;
         this.current.style.transform =
-          'perspective(1100px) rotateX(' + this.rx.toFixed(2) + 'deg) rotateY(' + this.ry.toFixed(2) + 'deg) scale(1.06)';
+          'perspective(1200px) translate3d(' + ptx.toFixed(2) + 'px,' + pty.toFixed(2) + 'px,0) ' +
+          'rotateX(' + this.x.toFixed(3) + 'deg) rotateY(' + this.y.toFixed(3) + 'deg) scale(1.06)';
       }
       this.raf = requestAnimationFrame(this.loop.bind(this));
     },
     start: function() {
-      this.loop();
+      this.raf = requestAnimationFrame(this.loop.bind(this));
     }
   };
 
@@ -487,9 +523,8 @@
       document.addEventListener('mousemove', function(e) {
         var nx = e.clientX / window.innerWidth - 0.5;
         var ny = e.clientY / window.innerHeight - 0.5;
-        var el = document.body;
-        el.classList.add('tilt-hover');
-        tilt.setTarget(-ny * 12, nx * 16);
+        document.body.classList.add('tilt-hover');
+        tilt.input(-ny * 12, nx * 16);
       });
       document.addEventListener('mouseleave', function() {
         document.body.classList.remove('tilt-hover');
@@ -501,13 +536,10 @@
     function bindGyro() {
       window.addEventListener('deviceorientation', function(e) {
         if (e.beta === null || e.gamma === null) return;
-        var beta = (typeof e.webkitCompassHeading !== 'undefined') ? e.beta : e.beta;
         var g = e.gamma;
-        var b = beta - (window.innerHeight > window.innerWidth ? 45 : 30);
+        var b = e.beta - (window.innerHeight > window.innerWidth ? 45 : 30);
         if (Math.abs(b) > 60) return;
-        var rx = b * 0.45;
-        var ry = g * 0.45;
-        tilt.setTarget(Math.max(-9, Math.min(9, rx)), Math.max(-9, Math.min(9, ry)));
+        tilt.input(b * 0.45, g * 0.45);
       }, { passive: true });
     }
 
