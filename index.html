@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>networKING</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    font-family: 'Cormorant Garamond', serif;
+    cursor: none;
+  }
+
+  .stage {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    will-change: opacity, transform;
+    transition: opacity 1.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .slide.active {
+    opacity: 1;
+    z-index: 2;
+  }
+
+  .slide.exiting {
+    opacity: 0;
+    z-index: 1;
+  }
+
+  .slide img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    will-change: transform;
+    transform-origin: center center;
+  }
+
+  /* Ken Burns — each slide gets a unique random animation via JS */
+  @keyframes kb1 {
+    from { transform: scale(1.0) translate(0, 0); }
+    to   { transform: scale(1.12) translate(-2%, 1%); }
+  }
+  @keyframes kb2 {
+    from { transform: scale(1.05) translate(2%, -1%); }
+    to   { transform: scale(1.0) translate(-1%, 2%); }
+  }
+  @keyframes kb3 {
+    from { transform: scale(1.1) translate(-3%, -2%); }
+    to   { transform: scale(1.0) translate(1%, 1%); }
+  }
+  @keyframes kb4 {
+    from { transform: scale(1.0) translate(1%, 3%); }
+    to   { transform: scale(1.15) translate(-2%, -1%); }
+  }
+  @keyframes kb5 {
+    from { transform: scale(1.08) translate(-1%, 2%); }
+    to   { transform: scale(1.02) translate(3%, -2%); }
+  }
+
+  /* Vignette overlay */
+  .vignette {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.7) 100%);
+  }
+
+  /* Film grain */
+  .grain {
+    position: fixed;
+    inset: -50%;
+    z-index: 51;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    animation: grain 0.5s steps(1) infinite;
+  }
+  @keyframes grain {
+    0%   { transform: translate(0, 0); }
+    20%  { transform: translate(-5%, 5%); }
+    40%  { transform: translate(3%, -3%); }
+    60%  { transform: translate(-2%, 2%); }
+    80%  { transform: translate(5%, -5%); }
+    100% { transform: translate(0, 0); }
+  }
+
+  /* Subtle dark overlay that pulses gently */
+  .atmosphere {
+    position: fixed;
+    inset: 0;
+    z-index: 49;
+    pointer-events: none;
+    background: rgba(0, 0, 0, 0.15);
+    animation: atmos 8s ease-in-out infinite alternate;
+  }
+  @keyframes atmos {
+    from { opacity: 0.1; }
+    to   { opacity: 0.25; }
+  }
+
+  /* Footer */
+  .footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    text-align: center;
+    padding: 24px 16px 20px;
+    background: linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 100%);
+    pointer-events: none;
+  }
+
+  .footer span {
+    font-size: 14px;
+    font-weight: 300;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.45);
+    font-style: italic;
+  }
+
+  /* Top fade for balance */
+  .top-fade {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 80px;
+    z-index: 49;
+    pointer-events: none;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, transparent 100%);
+  }
+
+  /* Mobile adjustments */
+  @media (max-width: 768px) {
+    .footer span {
+      font-size: 12px;
+      letter-spacing: 5px;
+    }
+    .footer {
+      padding: 20px 16px 16px;
+    }
+  }
+
+  /* Touch indicator — tap to skip */
+  .tap-zone {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    -webkit-tap-highlight-color: transparent;
+  }
+</style>
+</head>
+<body>
+
+<div class="stage" id="stage">
+  <div class="slide active" id="s0"><img src="images/1.jpg" alt=""></div>
+  <div class="slide"        id="s1"><img src="images/2.jpg" alt=""></div>
+  <div class="slide"        id="s2"><img src="images/3.jpg" alt=""></div>
+  <div class="slide"        id="s3"><img src="images/4.jpg" alt=""></div>
+  <div class="slide"        id="s4"><img src="images/5.jpg" alt=""></div>
+</div>
+
+<div class="vignette"></div>
+<div class="grain"></div>
+<div class="atmosphere"></div>
+<div class="top-fade"></div>
+
+<div class="footer"><span>networKING</span></div>
+
+<div class="tap-zone" id="tapZone"></div>
+
+<script>
+(function() {
+  const SLIDES = document.querySelectorAll('.slide');
+  const TOTAL = SLIDES.length;
+  const KBS = ['kb1', 'kb2', 'kb3', 'kb4', 'kb5'];
+  const tapZone = document.getElementById('tapZone');
+
+  let order = [];
+  let idx = 0;
+  let timer = null;
+
+  /* Fisher-Yates shuffle */
+  function shuffle() {
+    order = Array.from({ length: TOTAL }, (_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+  }
+
+  function pickKB() {
+    return KBS[Math.floor(Math.random() * KBS.length)];
+  }
+
+  function getKBStyle() {
+    /* Random duration between 12–20s for the Ken Burns pan */
+    const dur = 12 + Math.random() * 8;
+    const kb = pickKB();
+    return { animation: `${kb} ${dur}s ease-in-out forwards` };
+  }
+
+  function showSlide(n) {
+    const prev = order[idx];
+    idx = n;
+    const next = order[idx];
+    const prevEl = SLIDES[prev];
+    const nextEl = SLIDES[next];
+
+    /* Apply Ken Burns to the incoming image */
+    const img = nextEl.querySelector('img');
+    img.style.animation = 'none';
+    void img.offsetWidth; /* reflow */
+    const kbStyle = getKBStyle();
+    img.style.animation = kbStyle.animation;
+
+    /* Crossfade */
+    nextEl.classList.add('active');
+    prevEl.classList.remove('active');
+    prevEl.classList.add('exiting');
+
+    /* Clean up after transition */
+    setTimeout(() => {
+      prevEl.classList.remove('exiting');
+    }, 1800);
+  }
+
+  function next() {
+    let nextIdx = (idx + 1) % TOTAL;
+    if (nextIdx === 0) {
+      shuffle();
+    }
+    showSlide(nextIdx);
+    /* Random interval 5–9 seconds */
+    const delay = 5000 + Math.random() * 4000;
+    timer = setTimeout(next, delay);
+  }
+
+  function skip() {
+    clearTimeout(timer);
+    next();
+  }
+
+  /* Tap / click to skip */
+  tapZone.addEventListener('click', skip);
+  tapZone.addEventListener('touchend', function(e) {
+    e.preventDefault();
+    skip();
+  });
+
+  /* Preload images */
+  SLIDES.forEach((slide) => {
+    const img = slide.querySelector('img');
+    if (img.complete) return;
+    const preload = new Image();
+    preload.src = img.src;
+  });
+
+  /* Start */
+  shuffle();
+
+  /* Initial Ken Burns on first slide */
+  const firstImg = SLIDES[order[0]].querySelector('img');
+  const kbStyle = getKBStyle();
+  firstImg.style.animation = kbStyle.animation;
+
+  timer = setTimeout(next, 4000 + Math.random() * 2000);
+})();
+</script>
+</body>
+</html>
